@@ -1,15 +1,10 @@
-var http = require('http'); // 1 - Import Node.js core module
+const coap = require('coap') // or coap
+const server = coap.createServer({ type: 'udp6' })
 
-var server = http.createServer(function (req, res) {   // 2 - creating server
+server.on('request', (req, res) => {
+    res.end('Hello this is server' + '\n')
+})
 
-    //handle incomming requests here..
-    console.log("got req");
-    res.write("hello");
-    
-    res.end();
-
-});
-
-server.listen(9000); //3 - listen for any incoming requests
-
-console.log('Node.js web server at port 5000 is running..')
+server.listen(() => {
+    console.log('server started')
+})
