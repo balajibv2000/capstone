@@ -5,26 +5,35 @@ let cors = require("cors")
 const app = express()
 app.use(cors())
 
-const port = 5000
+const port = 5002
 
-app.get('/', (req, response) => {
+const pid = [1,2,3,4,5]
 
-	const node = coap.request('coap://[fd00::202:2:2:2]/node/critical')
 
-	var data = ""
+app.get('/critical', async (request, response) => {
 
-	node.on('response', (res) => {
-		  res.on('data' , (chunck) => {
-				data += chunck.toString()			
-			})
-			
+	const critical_data = []
+	count = 0;
+
+	for (x in pid){
+		const id = pid[x]
+		const payload = {pid: id , data: ''}
+
+		const node = coap.request(`coap://[fd00::20${id}:${id}:${id}:${id}]/node/critical`)
+		node.on('response', (res) => {
+			res.on('data' , (chunck) => {
+					payload.data += chunck.toString()			
+				})
+				
 			res.on('end' , () => {
-				console.log("Data: " + data)
-				response.send(data)
+				count++
+				critical_data.push(payload)
+				if(count === pid.length) response.send(critical_data)
 			})
-	})
+		})
+		node.end()
+	}
 
-	node.end()	
 })
 
 app.listen(port, () => {
