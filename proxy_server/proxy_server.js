@@ -7,16 +7,22 @@ app.use(cors())
 
 const port = 5000
 
+const QUEUE_SIZE = 10
+
+var critical_motes = []
+var critical_cache = {}
+
 app.get('/critical', async (request, response) => {
 
-	const critical_data = [] 
+	const critical_data = []
 	var payload = ''
-
+		
 	const node = coap.request('coap://[fd00::201:1:1:1]/node/critical')
 
 	node.on('response', (res) => {
+		console.log("Fetching critical data ...")
 		res.on('data' , (chunck) => {
-				payload += chunck.toString()			
+				payload += chunck.toString()	
 			})
 			
 		res.on('end' , () => {
@@ -24,8 +30,23 @@ app.get('/critical', async (request, response) => {
 			arr.pop()
 			for( x in arr){
 				const data = arr[x].split(' ')
+				const id = data[0]
 				const obj = {pid: parseInt(data[0]) , oxy: parseInt(data[1]) , temp: parseInt(data[2]) , pulse: parseInt(data[3]) , bp: parseInt(data[4])}
 				critical_data.push(obj)
+				if(critical_motes.indexOf(id) == -1){
+          critical_motes.push(id)
+          critical_cache[id] = []
+					critical_cache[id].push(obj)
+        }
+				else{
+					if(critical_cache[id].length < QUEUE_SIZE){
+						critical_cache[id].push(obj)
+					}
+					else {
+						critical_cache[id].shift()
+						critical_cache[id].push(obj)
+					}
+				}
 			}
 			response.send(critical_data)
 		})
@@ -33,6 +54,13 @@ app.get('/critical', async (request, response) => {
 	node.end()
 
 })
+
+app.get('/critical/:id', function(req, res) {
+
+  res.send(critical_cache[req.params.id]); 
+   
+});
+
 
 app.get('/mid-critical', async (request, response) => {
 

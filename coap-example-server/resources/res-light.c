@@ -31,31 +31,25 @@
 
 /**
  * \file
- *      Erbium (Er) CoAP Engine example.
+ *      Example resource
  * \author
  *      Matthias Kovatsch <kovatsch@inf.ethz.ch>
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include "contiki.h"
+
+#if PLATFORM_HAS_LIGHT
+
+#include <stdio.h>
+#include <string.h>
 #include "coap-engine.h"
-
-
-/* Log configuration */
-#include "sys/log.h"
-#define LOG_MODULE "App"
-#define LOG_LEVEL LOG_LEVEL_APP
-/*
- * Resources to be activated need to be imported through the extern keyword.
- * The build system automatically compiles the resources in the corresponding sub-directory.
- */
-//extern coap_resource_t res_hello;
+#include "dev/light-sensor.h"
 
 static void res_get_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
-RESOURCE(res_critical,
-         "title=\"Hello world: ?len=0..\";rt=\"Text\"",
+
+/* A simple getter example. Returns the reading from light sensor with a simple etag */
+RESOURCE(res_light,
+         "title=\"Photosynthetic and solar light (supports JSON)\";rt=\"LightSensor\"",
          res_get_handler,
          NULL,
          NULL,
@@ -64,54 +58,31 @@ RESOURCE(res_critical,
 static void
 res_get_handler(coap_message_t *request, coap_message_t *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
-  const char *len = NULL;
-  /* Some data that has the length up to REST_MAX_CHUNK_SIZE. For more, see the chunk resource. */
-  char message[30];
-	sprintf(message , "Hello critical %d" , (rand() % 10));
-  int length = 16; /*           |<-------->| */
+  uint16_t light_photosynthetic = light_sensor.value(LIGHT_SENSOR_PHOTOSYNTHETIC);
+  uint16_t light_solar = light_sensor.value(LIGHT_SENSOR_TOTAL_SOLAR);
 
-  /* The query string can be retrieved by rest_get_query() or parsed for its key-value pairs. */
-  if(coap_get_query_variable(request, "len", &len)) {
-    length = atoi(len);
-    if(length < 0) {
-      length = 0;
-    }
-    if(length > REST_MAX_CHUNK_SIZE) {
-      length = REST_MAX_CHUNK_SIZE;
-    }
-    memcpy(buffer, message, length);
+  unsigned int accept = -1;
+  coap_get_header_accept(request, &accept);
+
+  if(accept == -1 || accept == TEXT_PLAIN) {
+    coap_set_header_content_format(response, TEXT_PLAIN);
+    snprintf((char *)buffer, COAP_MAX_CHUNK_SIZE, "%u;%u", light_photosynthetic, light_solar);
+
+    coap_set_payload(response, (uint8_t *)buffer, strlen((char *)buffer));
+  } else if(accept == APPLICATION_XML) {
+    coap_set_header_content_format(response, APPLICATION_XML);
+    snprintf((char *)buffer, COAP_MAX_CHUNK_SIZE, "<light photosynthetic=\"%u\" solar=\"%u\"/>", light_photosynthetic, light_solar);
+
+    coap_set_payload(response, buffer, strlen((char *)buffer));
+  } else if(accept == APPLICATION_JSON) {
+    coap_set_header_content_format(response, APPLICATION_JSON);
+    snprintf((char *)buffer, COAP_MAX_CHUNK_SIZE, "{'light':{'photosynthetic':%u,'solar':%u}}", light_photosynthetic, light_solar);
+
+    coap_set_payload(response, buffer, strlen((char *)buffer));
   } else {
-    memcpy(buffer, message, length);
+    coap_set_status_code(response, NOT_ACCEPTABLE_4_06);
+    const char *msg = "Supporting content-types text/plain, application/xml, and application/json";
+    coap_set_payload(response, msg, strlen(msg));
   }
-
-  coap_set_header_content_format(response, TEXT_PLAIN); /* text/plain is the default, hence this option could be omitted. */
-  coap_set_header_etag(response, (uint8_t *)&length, 1);
-  coap_set_payload(response, buffer, length);
 }
-
-PROCESS(er_example_server, "Erbium Example Server");
-AUTOSTART_PROCESSES(&er_example_server);
-
-PROCESS_THREAD(er_example_server, ev, data)
-{
-  PROCESS_BEGIN();
-
-  PROCESS_PAUSE();
-
-  LOG_INFO("Starting Erbium Example Server\n");
-
-  /*
-   * Bind the resources to their Uri-Path.
-   * WARNING: Activating twice only means alternate path, not two instances!
-   * All static variables are the same for each URI path.
-   */
-  coap_activate_resource(&res_critical, "node/critical");
-
-
-  /* Define application-specific events here. */
-  while(1) {
-    PROCESS_WAIT_EVENT();
-  }                            
-
-  PROCESS_END();
-}
+#endif /* PLATFORM_HAS_LIGHT */
